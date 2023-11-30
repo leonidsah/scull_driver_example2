@@ -1,0 +1,1 @@
+cmd_/home/leonidsah/Desktop/scull_driver2/scull.ko := ld -r -m elf_x86_64 -z noexecstack --build-id=sha1  -T scripts/module.lds -o /home/leonidsah/Desktop/scull_driver2/scull.ko /home/leonidsah/Desktop/scull_driver2/scull.o /home/leonidsah/Desktop/scull_driver2/scull.mod.o;  true
