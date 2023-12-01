@@ -6,16 +6,16 @@
 #include <asm/uaccess.h>
 #include <linux/wait.h>
 
-MODULE_AUTHOR("анютик");
+MODULE_AUTHOR("");
 MODULE_LICENSE("GPL");
 
 int scull_major = 0;		
 int scull_minor = 0;		
 int scull_nr_devs = 3;		
-int scull_quantum = 4;	
-int scull_qset = 15;	
+int scull_quantum = 2;	
+int scull_qset = 256;	
 
-// Новые переменные для условий блокировки
+// Очереди для условий блокировки
 DECLARE_WAIT_QUEUE_HEAD(read_queue);
 DECLARE_WAIT_QUEUE_HEAD(write_queue);
 DEFINE_MUTEX(scull_mutex);
@@ -51,7 +51,7 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n);
 struct file_operations scull_fops = {		
 	.owner = THIS_MODULE,			
 	.read = scull_read,
-	.write = scull_write,
+	.write = scull_write_new,
 	.open = scull_open,
 	.release = scull_release,
 };
@@ -234,7 +234,7 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
 
     /* Если буфер был полностью заполнен перед чтением, очищаем его */
     if (flag) {
-        printk("Очищаем буфер");
+        printk("Очистка буфера");
         retval = count;
         count = 0;
         *f_pos = 0;
@@ -247,6 +247,138 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     out:
     up(&dev->sem);
     wake_up_interruptible(&write_queue); // разбудить процессы, ожидающие записи
+    return retval;
+}
+
+// last change: 1 Dec 2023, 14:34
+ssize_t scull_write_new(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
+{
+    struct scull_dev *dev = filp->private_data;
+    struct scull_qset *dptr;
+    int quantum = dev->quantum, qset = dev->qset;
+    int itemsize = quantum * qset;
+    int item, s_pos, q_pos, rest;
+    int nbytes;
+    /* Дополнение кода */
+    int write_more_q = 0; // Нужно ли писать больше 1-го кванта
+    /* Дополнение кода */
+    ssize_t retval = -ENOMEM; /* значение используется в инструкции "goto out" */
+    unsigned long max_size = scull_quantum * scull_qset;
+
+    /* Определяем текущую позицию для записи, 
+    проверяем переполнение устройства, в случае чего отбрасываем
+    данные выходящие за max_size путем уменьшения count */
+    if (dev->size + count > max_size) {
+        count = max_size - dev->size;
+    }
+
+    if (down_interruptible(&dev->sem))
+        return -ERESTARTSYS;
+
+
+    while (dev->size >= max_size) {
+        printk("Буфер заполнен / переполнен");
+        if (filp->f_flags & O_NONBLOCK) {
+            up(&dev->sem);
+            return -EAGAIN; // если неблокирующий режим
+        }
+        /* Освобождаем блокировку и ждем изменения размера буфера */
+        up(&dev->sem);
+        wait_event_interruptible(write_queue, dev->size < max_size);
+        if (down_interruptible(&dev->sem))
+            return -ERESTARTSYS;
+    }
+
+    /* Находим списковый объект, индекс qset, и смещение в кванте */
+    item = (long)*f_pos / itemsize;
+    rest = (long)*f_pos % itemsize;
+    s_pos = rest / quantum;
+    q_pos = rest % quantum;
+
+    // Переходим к списковому объекту
+    dptr = scull_follow(dev, item);
+    // Проверяем что выделена память под  список квантов в этом списковом объекте
+    if (!dptr->data) {
+        dptr->data = kmalloc(qset * sizeof(char *), GFP_KERNEL);
+        if (!dptr->data)
+            goto out;
+        memset(dptr->data, 0, qset * sizeof(char *));
+    }
+    // Проверяем что выделена память под квант
+    if (!dptr->data[s_pos]) {
+        dptr->data[s_pos] = kmalloc(quantum, GFP_KERNEL);
+        if (!dptr->data[s_pos])
+            goto out;
+    }
+
+    /* копирование данных из пользовательского буфера */
+    if (count < quantum - q_pos)
+        nbytes = count;
+    else    /* избегаем попытки записать в следующий квант */
+    {
+        nbytes = quantum - q_pos;
+        /* Дополнение кода */
+        write_more_q = 1;
+        /* Дополнение кода */
+    }   
+        
+
+    if (copy_from_user(dptr->data[s_pos] + q_pos, buf, nbytes)) {
+        retval = -EFAULT; /* ошибочный адрес - вернуть ошибку */
+        goto out;
+    }
+    *f_pos += nbytes; /* обновление позиции файла */
+
+    if (dev->size < *f_pos)
+        dev->size = *f_pos;
+    retval = nbytes;
+    
+    /* Дополнение кода */
+    // Если мы не вышли за пределы кванта ранее, значит можно не выполнять доп. код
+    if (!write_more_q) goto out;
+    // Определяем сколько мы не дозаписали после того как квант заполнился
+    int bytes_left = count - nbytes;
+    int quant_left = bytes_left / quantum + 1;
+    int init_s_pos = s_pos + 1;
+    q_pos = 0:
+    for (int i = 0; i < quant_left; i++)
+    {
+        // записать кванты
+        // предполагаем, что мы не выходим за пределы квантов, которыми располагает текущий qset
+            != ((long)*f_pos + bytes_left) / itemsize)
+        {
+            printk("Доп. код не выполнен, обнаружен выход за пределы q_set");
+            goto out; 
+        }
+        if (bytes_left > quantum)
+        {
+            nbytes = quantum;
+            bytes_left -= quantum;
+        }
+        else nbytes = bytes_left;
+        s_pos = init_s_pos + i;
+        // Проверяем что выделена память под квант
+        if (!dptr->data[s_pos]) {
+        dptr->data[s_pos] = kmalloc(quantum, GFP_KERNEL);
+        if (!dptr->data[s_pos])
+            goto out;
+        }
+        
+        if (copy_from_user(dptr->data[s_pos] + 0, buf+(count - bytes_left), nbytes)) {
+            retval = -EFAULT; /* ошибочный адрес - вернуть ошибку */
+            goto out;
+        }
+        *f_pos += nbytes; /* обновление позиции файла */
+
+        if (dev->size < *f_pos)
+            dev->size = *f_pos;
+        retval += nbytes;
+    }
+    printk("Доп. код выполен");
+    /* Дополнение кода */
+    out:
+    up(&dev->sem);
+    wake_up_interruptible(&read_queue); // разбудить процессы, ожидающие чтения
     return retval;
 }
 
