@@ -11,7 +11,7 @@ MODULE_LICENSE("GPL");
 
 int scull_major = 0;		
 int scull_minor = 0;		
-int scull_nr_devs = 3;		
+int scull_nr_devs = 1;		
 int scull_quantum = 2;	
 int scull_qset = 256;	
 
