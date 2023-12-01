@@ -5,23 +5,16 @@
 #include <unistd.h>
 
 #define BUFF_SIZE 100
+#define DEV0 "/dev/scull0"
 
 int main()
 {
     int fd;
-    char ch, write_buf[BUFF_SIZE], read_buf[BUFF_SIZE], device_choice;
+    char ch, write_buf[BUFF_SIZE], read_buf[BUFF_SIZE];
 
-    printf("Выберите устройство: \n");
-    printf("0 - устройство scull0\n");
-    printf("1 - устройство scull1\n");
-    printf("2 - устройство scull2\n");
+    printf("Устройство %s: \n", DEV0);
 
-    scanf("%c", &device_choice);
-
-    char device_path[20];
-    sprintf(device_path, "/dev/scull%c", device_choice);
-
-    fd = open(device_path, O_RDWR);
+    fd = open(DEV0, O_RDWR);
 
     if (fd < 0) {
         perror("Ошибка открытия устройства");
