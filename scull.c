@@ -7,7 +7,7 @@
 #include <linux/wait.h>
 #include <asm/ioctl.h>
 
-MODULE_AUTHOR("");
+MODULE_AUTHOR("A. Hrapkov");
 MODULE_LICENSE("GPL");
 
 int scull_major = 0;

@@ -8,6 +8,8 @@ KBUILD_CFLAGS   +=  -g -Wall
 all:
 	make -C $(KERNELDIR) M=$(shell pwd) modules
 	gcc $(TEST).c -o $(TEST)
+	make load
+	make create
 
 clean:
 	make -C $(KERNELDIR) M=$(shell pwd) clean
@@ -24,12 +26,4 @@ create:
 
 rm:
 	sudo rmmod scull.ko
-	sudo rm -rf /dev/scull0
-sign:
-	/usr/src/linux-headers-6.2.0-36-generic/scripts/sign-file sha256 ~/keys/key1/MOK.priv ~/keys/key1/MOK.pem ./scull.ko
-restart:
-	make clean 
-	make all 
-	make sign 
-	make load
-	make create
+	sudo rm /dev/scull0
