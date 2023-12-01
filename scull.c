@@ -5,6 +5,7 @@
 #include <linux/slab.h> 	
 #include <asm/uaccess.h>
 #include <linux/wait.h>
+#include <asm/ioctl.h>
 
 MODULE_AUTHOR("");
 MODULE_LICENSE("GPL");
@@ -19,6 +20,8 @@ int scull_qset = 256;
 DECLARE_WAIT_QUEUE_HEAD(read_queue);
 DECLARE_WAIT_QUEUE_HEAD(write_queue);
 DEFINE_MUTEX(scull_mutex);
+// Номер команды для ioctl для указания смещения при записи/чтении
+#define SCULL_IOCTL1 0x7701 
 
 struct scull_qset {
 	void **data;			
@@ -47,12 +50,14 @@ int scull_release(struct inode *inode, struct file *flip);
 ssize_t scull_read(struct file *flip, char __user *buf, size_t count, loff_t *f_pos);
 ssize_t scull_write(struct file *flip, const char __user *buf, size_t count, loff_t *f_pos);
 struct scull_qset *scull_follow(struct scull_dev *dev, int n);
+int scull_ioctl (struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg);
 
 struct file_operations scull_fops = {		
 	.owner = THIS_MODULE,			
 	.read = scull_read,
 	.write = scull_write_new,
 	.open = scull_open,
+ .ioctl = scull_ioctl,
 	.release = scull_release,
 };
 
@@ -500,6 +505,26 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n) {
     }
 
     return qs;
+}
+
+int scull_ioctl (struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    switch(cmd)
+    {
+        case SCULL_IOCTL1:
+            loff_t *f_pos = &(filp->f_pos);
+            unsigned long max_size = scull_quantum * scull_qset;
+            if (*f_pos + arg > max_size)
+            {
+                printk("Scull IOCTL: invalid offset");
+                return -1;
+            }
+            *f_pos += arg;
+            return 0;
+        default:
+            printk("Wrong ioctl command");
+            return -1;
+    }
 }
 
 module_init(scull_init_module);		
