@@ -19,32 +19,40 @@ int main()
 
     fd = open(DEV0, O_RDWR);
 
-    if (fd < 0) {
+    if (fd < 0)
+    {
         perror("Ошибка открытия устройства");
         return -1;
     }
+choice:
     printf("r - read, w - write, o - offset\n");
     scanf(" %c", &ch);
-
-    switch (ch) {
+    switch (ch)
+    {
     case 'w':
         printf("Введите данные: ");
         scanf(" %[^\n]", write_buf);
-        write(fd, write_buf, strlen(write_buf)); 
+        write(fd, write_buf, strlen(write_buf));
+        goto choice;
         break;
     case 'r':
         int bytes_read = read(fd, read_buf, sizeof(read_buf) - 1); // Читаем данные
-        if (bytes_read < 0) {
+        if (bytes_read < 0)
+        {
             perror("Ошибка чтения из устройства");
-        } else {
-            read_buf[bytes_read] = '\0'; // Добавляем символ конца строки
-            printf("scull: %s\n", read_buf); // Выводим прочитанные данные
+        }
+        else
+        {
+            read_buf[bytes_read] = '\0';     // Добавляем символ конца строки
+            printf("scull: %s :: bytes_read: %i\n", read_buf, bytes_read); // Выводим прочитанные данные
+            goto choice;
         }
         break;
     case 'o':
-        printf("Введите смещение для чтения/записи: ");
+        printf("Введите смещение для чтения: ");
         scanf("%d", &offset);
-        ioctl(fd, SCULL_IOCTL1, offset); 
+        ioctl(fd, SCULL_IOCTL1, offset);
+        goto choice;
         break;
     }
     close(fd);
